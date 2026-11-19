@@ -97,10 +97,15 @@ export function createGuards({ scene, collision, level, audio }) {
     scene.add(char.root, shadow);
 
     // flashlight beam
-    const beamGeo = new THREE.ConeGeometry(0.75, 3.2, 12, 1, true).rotateX(-Math.PI / 2).translate(0, 0, 1.6 + 0.12);
+    // apex at the origin, opening along +Z: a uniform scale then cuts the cone short without
+    // changing its spread, which is how the beam gets clipped at walls
+    const beamGeo = new THREE.ConeGeometry(GUARD.beamRadius, GUARD.beamLength, 12, 1, true)
+      .rotateX(-Math.PI / 2)
+      .translate(0, 0, GUARD.beamLength / 2);
     const beam = new THREE.Mesh(beamGeo, new THREE.MeshBasicMaterial({
       color: 0xffd9a0, transparent: true, opacity: 0.1, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
     }));
+    beam.position.z = GUARD.beamOffset;
     char.flashlight.add(beam);
 
     // floor vision cone, rebuilt each frame in world space
@@ -282,6 +287,23 @@ export function createGuards({ scene, collision, level, audio }) {
     g.coneMat.opacity = g.sees ? 0.34 : g.state === 'PATROL' ? 0.17 : 0.26;
   }
 
+  // Shorten the flashlight beam so it stops at walls, closed doors and furniture (not glass).
+  const beamFrom = new THREE.Vector3();
+  const beamTo = new THREE.Vector3();
+  const beamDir = new THREE.Vector3();
+  const passesBeam = (col) => col.kind === 'glass';
+  function clipBeam(g) {
+    if (!g.active) return;
+    g.char.root.updateMatrixWorld(true);
+    g.beam.scale.setScalar(1);
+    g.beam.updateMatrixWorld();
+    g.beam.getWorldPosition(beamFrom);
+    beamDir.set(0, 0, 1).transformDirection(g.beam.matrixWorld);
+    beamTo.copy(beamFrom).addScaledVector(beamDir, GUARD.beamLength);
+    const t = collision.segmentCast(beamFrom, beamTo, 0, passesBeam);
+    g.beam.scale.setScalar(Math.max(0.02, t));
+  }
+
   function sync(g) {
     g.char.root.position.set(g.pos.x, 0, g.pos.z);
     g.char.root.rotation.y = g.facing;
@@ -426,6 +448,7 @@ export function createGuards({ scene, collision, level, audio }) {
         if (g.barkT > 0) { g.barkT -= dt; if (g.barkT <= 0) g.bark = null; }
         g.char.animate(dt, { speed: g.speed, flashlightUp: true, lookYaw });
         sync(g);
+        clipBeam(g);
         if (g.cone.visible) updateCone(g);
         if (g.ray && debugRays) {
           const a = g.ray.geometry.attributes.position.array;

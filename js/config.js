@@ -86,6 +86,9 @@ export const GUARD = {
   eyeHeight: 1.6,
   coneRays: 18,
   coneStep: 0.25,
+  beamLength: 3.2, // flashlight beam length before it is clipped by walls
+  beamRadius: 0.75,
+  beamOffset: 0.12, // beam starts this far in front of the flashlight body
   repathInterval: 0.4,
   waypointReach: 0.2,
   barkTime: 1.8,

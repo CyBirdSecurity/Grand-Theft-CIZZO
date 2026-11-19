@@ -126,14 +126,14 @@ export function createCollision(level) {
   }
 
   /** Fraction (0..1) along the 3D segment from -> to before it hits a collider box. */
-  function segmentCast(from, to, pad = 0) {
+  function segmentCast(from, to, pad = 0, ignore = null) {
     const dx = to.x - from.x;
     const dy = to.y - from.y;
     const dz = to.z - from.z;
     const list = nearby(Math.min(from.x, to.x) - 1, Math.max(from.x, to.x) + 1, Math.min(from.z, to.z) - 1, Math.max(from.z, to.z) + 1);
     let best = 1;
     for (const b of list) {
-      if (!b.enabled) continue;
+      if (!b.enabled || (ignore && ignore(b))) continue;
       let tmin = 0;
       let tmax = 1;
       const axes = [
