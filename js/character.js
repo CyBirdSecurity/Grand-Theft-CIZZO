@@ -7,11 +7,14 @@ import { M, paint, merge, createBodyMaterial } from './materials.js';
 import { PALETTE } from './config.js';
 import { buildBody } from './body.js';
 
+// Cizzo wears a full dark suit: jacket over a white shirt, magenta tie and pocket square.
+const SUIT = 0x23213a;
 export const CIZZO = {
   id: 'cizzo',
-  skin: 0xc68a63, hair: 0x241710, shirt: 0xcac5da, sleeve: 0xcac5da, forearm: 0xc68a63, cuff: 0xcac5da,
-  collar: 0xcac5da, vest: 0x262338, tie: 0x161427, pants: 0x1d1b2c, shoes: 0x0d0b14, belt: 0x0d0b14,
-  glasses: true, stubble: 0x8a6048, lips: 0x7a4436, quiff: true, watch: 0xc9c2d8, accent: PALETTE.magenta,
+  skin: 0xc68a63, hair: 0x241710, shirt: 0xcac5da, sleeve: SUIT, forearm: SUIT, cuff: null, wristCuff: 0xcac5da,
+  collar: 0xcac5da, vest: SUIT, jacket: true, lapel: 0x1a1830, tie: 0x7a1c55, pocketSquare: 0xff3ea5,
+  pants: SUIT, shoes: 0x0d0b14, belt: 0x0d0b14,
+  glasses: true, stubble: 0x8a6048, lips: 0x7a4436, quiff: true, accent: PALETTE.magenta,
 };
 
 const GUARD_BASE = {
@@ -82,6 +85,7 @@ function shapesFor(o) {
   const pelvisPos = [0, 0.0, 0];
   add({ type: 'ell', bone: 'hips', pos: pelvisPos, r: [0.168 * b, 0.12, 0.122], k: 0, color: o.pants,
     paint: boneSpace(pelvisPos, (x, y, z) => {
+      if (o.jacket && y > -0.035) return o.vest; // jacket hem covers the belt
       if (y > 0.045 && y < 0.1) return Math.abs(x) < 0.024 && z > 0.06 ? 0xb8b0c8 : o.belt;
       return null;
     }) });
@@ -89,13 +93,21 @@ function shapesFor(o) {
   // torso (waist, chest, trapezius) painted with the outfit
   const torsoPaint = o.vest
     ? (x, y, z) => {
-      if (y > 0.5) return o.shirt;
       const front = z > 0.03;
-      if (front && y > 0.07 && y < 0.5) {
+      const ax = Math.abs(x);
+      if (y > 0.5) {
+        if (!o.jacket) return o.shirt;
+        // jacket over the shoulders; white shirt collar at the front of the neck
+        return front && ax < 0.07 && y < 0.58 ? o.shirt : o.vest;
+      }
+      if (front && y > 0.07) {
         const tieW = 0.017 + (0.5 - y) * 0.03;
-        if (y > 0.455 && Math.abs(x) < 0.03) return o.tie;
-        if (Math.abs(x) < tieW && y > 0.12) return o.tie;
-        if (y > 0.24 && Math.abs(x) < (0.1 * (y - 0.24)) / 0.26) return o.shirt;
+        const vW = y > 0.24 ? (0.1 * (y - 0.24)) / 0.26 : 0;
+        if (y > 0.455 && ax < 0.03) return o.tie;
+        if (ax < Math.min(tieW, o.jacket ? vW : 1) && y > 0.12) return o.tie; // tie tucks under a buttoned jacket
+        if (ax < vW) return o.shirt;
+        if (o.lapel && ax < vW + 0.03 && y > 0.22) return o.lapel;
+        if (o.pocketSquare && x < -0.08 && x > -0.13 && y > 0.36 && y < 0.395) return o.pocketSquare;
       }
       return o.vest;
     }
@@ -158,10 +170,12 @@ function shapesFor(o) {
     add({ type: 'cone', bone: el, pos: [0, 0, 0], to: [0, -0.24, 0], r1: 0.05, r2: 0.036, k: 0.03, color: o.forearm,
       paint: (x, y) => {
         if (o.cuff && y > -0.055) return o.cuff;
+        if (o.wristCuff && y < -0.212) return o.wristCuff;
         if (o.watch && side < 0 && y < -0.198 && y > -0.222) return o.watch;
         return null;
       } });
     if (o.cuff) add({ type: 'cone', bone: el, pos: [0, 0.012, 0], to: [0, -0.06, 0], r1: 0.058, r2: 0.056, k: 0.014, color: o.cuff });
+    if (o.wristCuff) add({ type: 'cone', bone: el, pos: [0, -0.214, 0], to: [0, -0.03, 0], r1: 0.042, r2: 0.041, k: 0.01, color: o.wristCuff });
     add({ type: 'ell', bone: el, pos: [0, -0.305, 0.008], r: [0.024, 0.062, 0.044], k: 0.03, color: o.skin });
     add({ type: 'cone', bone: el, pos: [0, -0.268, 0.036], to: [0, -0.05, 0.016], r1: 0.013, r2: 0.011, k: 0.014, color: o.skin });
   }
@@ -297,7 +311,7 @@ export function createCharacter(o) {
   if (torsoProps) bones.torso.add(new THREE.Mesh(torsoProps, M.character));
 
   const accentMat = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: o.accent || 0, emissiveIntensity: 1.2 });
-  if (o.accent) bones.hips.add(new THREE.Mesh(belt, accentMat));
+  if (o.accent && !o.jacket) bones.hips.add(new THREE.Mesh(belt, accentMat));
 
   let flashlight = null;
   let lens = null;

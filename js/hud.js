@@ -84,6 +84,8 @@ export function createHud({ scene, camera, level }) {
   const barkEls = new Map();
   let lastObjective = '';
   let flashT = 0;
+  let lastRow2 = '';
+  const portrait = matchMedia('(orientation: portrait) and (max-width: 700px)');
 
   function toast(text, kind = '') {
     toastQueue.push({ text, kind });
@@ -264,6 +266,13 @@ export function createHud({ scene, camera, level }) {
         flashT -= dt;
         if (flashT <= 0) el.flash.style.opacity = '0';
       }
+
+      // portrait phones: the alert row sits just below whichever top-row panel is taller
+      if (portrait.matches) {
+        const bottom = Math.max(el.objective.parentElement.getBoundingClientRect().bottom, mm.getBoundingClientRect().bottom);
+        const row2 = `${Math.ceil(bottom + 8)}px`;
+        if (row2 !== lastRow2) { el.hud.style.setProperty('--row2', row2); lastRow2 = row2; }
+      } else if (lastRow2) { el.hud.style.removeProperty('--row2'); lastRow2 = ''; }
 
       drawMinimap(ctx);
       updateMarker(ctx, time);
