@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0b0820">
+  <title>Grand Theft Cizzo</title>
+  <meta name="description" content="A neon stealth heist in your browser. Break into ACME Corp at night, steal the computer and get out before the SOC catches you.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Grand Theft Cizzo">
+  <meta property="og:description" content="Steal the data. Don't get caught. A low-poly neon stealth heist that runs in your browser.">
+  <meta property="og:url" content="https://gtc.cybirdsecurity.com/">
+  <meta property="og:image" content="https://gtc.cybirdsecurity.com/assets/cover.jpg">
+  <meta property="og:image:width" content="1166">
+  <meta property="og:image:height" content="1092">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://gtc.cybirdsecurity.com/assets/cover.jpg">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png">
+  <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/game.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three/build/three.module.min.js",
+        "three/addons/": "./vendor/three/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="game" aria-label="Game view"></div>
+  <div id="vignette" aria-hidden="true"></div>
+  <div id="flash" aria-hidden="true"></div>
+
+  <!-- Touch layer: floating joystick on the left, look drag on the right -->
+  <div id="touch" hidden>
+    <div id="joy-base" aria-hidden="true"><div id="joy-knob"></div></div>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud" hidden>
+    <div id="hud-objective" class="panel">
+      <div class="label">OBJECTIVE <span id="timer">0:00</span></div>
+      <div id="objective-text"></div>
+      <div id="inventory">
+        <span id="inv-keycard" class="inv" hidden title="Keycard">▭ KEYCARD</span>
+        <span id="inv-computer" class="inv magenta" hidden title="Computer">▮ COMPUTER</span>
+      </div>
+    </div>
+    <div id="alert" class="panel" data-level="0" role="meter" aria-label="SOC alert">
+      <div class="alert-row"><span id="alert-label">MONITORING</span><span id="alert-pct">0%</span></div>
+      <div id="alert-bar"></div>
+    </div>
+    <div id="hud-right">
+      <canvas id="minimap" class="panel" aria-label="Minimap"></canvas>
+    </div>
+    <div id="prompt" hidden></div>
+    <div id="toasts" aria-live="polite"></div>
+    <div id="marker-arrow" hidden aria-hidden="true">➤</div>
+    <div id="barks" aria-live="polite"></div>
+    <div id="touch-buttons">
+      <button id="btn-pause" class="btn-icon touch-only" aria-label="Pause">⏸</button>
+      <button id="btn-crouch" class="tbtn touch-only" aria-pressed="false">Crouch</button>
+      <button id="btn-interact" class="tbtn primary touch-only" hidden>Interact</button>
+    </div>
+    <div id="debug" hidden></div>
+  </div>
+
+  <div id="lockpick" hidden></div>
+
+  <!-- Screens -->
+  <section id="screen-title" class="screen title" hidden>
+    <img class="cover" src="assets/cover.jpg" alt="Grand Theft Cizzo cover art: Cizzo in sunglasses in front of the ACME Corp tower at sunset">
+    <div class="title-shade"></div>
+    <div class="title-ui">
+      <p class="tagline">STEAL THE DATA. <strong>DON'T GET CAUGHT.</strong></p>
+      <nav class="menu" aria-label="Main menu">
+        <button class="btn primary" data-action="play">Play</button>
+        <button class="btn" data-action="continue" hidden>Continue</button>
+        <button class="btn" data-action="controls">Controls</button>
+        <button class="btn" data-action="settings">Settings</button>
+        <button class="btn fs-only" data-action="fullscreen" hidden>Fullscreen</button>
+      </nav>
+      <p class="best" id="best"></p>
+      <p class="loading" id="loading" hidden>Loading the night shift…</p>
+    </div>
+  </section>
+
+  <section id="screen-brief" class="screen dim" hidden>
+    <div class="card scrollable">
+      <h2>Incoming message</h2>
+      <p class="from">FROM: <span>M.</span> — the client</p>
+      <p class="brief">Cizzo — ACME Corp thinks its SOC is untouchable. Their server room holds one tower with everything they don't want the world to see. Lift the keycard from the lobby security desk, take the north corridor, pick the server-room lock and walk that computer out through the loading dock. The night guards are sleepy; the SOC is not. Stay out of the flashlights, crouch behind cover and keep the alert meter low. Get it done.</p>
+      <div class="menu row">
+        <button class="btn primary" data-action="start">Start the job</button>
+        <button class="btn" data-action="back">Back</button>
+      </div>
+      <p class="hint" id="brief-hint"></p>
+    </div>
+  </section>
+
+  <section id="screen-controls" class="screen dim" hidden>
+    <div class="card scrollable">
+      <h2>Controls</h2>
+      <div class="tabs" role="tablist">
+        <button class="tab" data-scheme="keyboard" role="tab">Keyboard + mouse</button>
+        <button class="tab" data-scheme="touch" role="tab">Touch</button>
+        <button class="tab" data-scheme="gamepad" role="tab">Gamepad</button>
+      </div>
+      <table class="controls" id="controls-table"></table>
+      <p class="hint">Stay out of the orange vision cones. Crouching makes you quieter and hides you behind desks and cubicles. Carrying the computer is slow and loud.</p>
+      <div class="menu row"><button class="btn primary" data-action="back">Back</button></div>
+    </div>
+  </section>
+
+  <section id="screen-settings" class="screen dim" hidden>
+    <div class="card scrollable">
+      <h2>Settings</h2>
+      <div class="settings">
+        <div class="setting"><span id="lbl-quality">Quality</span>
+          <div class="seg" role="radiogroup" aria-labelledby="lbl-quality">
+            <button class="seg-btn" data-quality="low" role="radio">Low</button>
+            <button class="seg-btn" data-quality="medium" role="radio">Medium</button>
+            <button class="seg-btn" data-quality="high" role="radio">High</button>
+          </div>
+        </div>
+        <label class="setting"><span>Look sensitivity</span><input type="range" id="set-sens" min="0.3" max="2.5" step="0.1"></label>
+        <label class="setting"><span>Music volume</span><input type="range" id="set-music" min="0" max="1" step="0.05"></label>
+        <label class="setting"><span>Effects volume</span><input type="range" id="set-sfx" min="0" max="1" step="0.05"></label>
+        <div class="setting"><span>Invert look Y</span><button class="toggle" id="set-invert" aria-pressed="false"></button></div>
+        <div class="setting"><span>Show vision cones</span><button class="toggle" id="set-cones" aria-pressed="true"></button></div>
+        <div class="setting"><span>Reduced motion</span><button class="toggle" id="set-motion" aria-pressed="false"></button></div>
+        <div class="setting"><span>Large HUD text</span><button class="toggle" id="set-large" aria-pressed="false"></button></div>
+      </div>
+      <div class="menu row"><button class="btn primary" data-action="back">Back</button></div>
+    </div>
+  </section>
+
+  <section id="screen-pause" class="screen dim" hidden>
+    <div class="card">
+      <h2>Paused</h2>
+      <nav class="menu">
+        <button class="btn primary" data-action="resume">Resume</button>
+        <button class="btn" data-action="restart">Restart from checkpoint</button>
+        <button class="btn" data-action="controls">Controls</button>
+        <button class="btn" data-action="settings">Settings</button>
+        <button class="btn fs-only" data-action="fullscreen" hidden>Fullscreen</button>
+        <button class="btn" data-action="quit">Quit to title</button>
+      </nav>
+    </div>
+  </section>
+
+  <section id="screen-results" class="screen dim" hidden>
+    <div class="card scrollable">
+      <h2>Heist complete</h2>
+      <div class="stars" id="res-stars" aria-label="Rating"></div>
+      <p class="flavour" id="res-flavour"></p>
+      <dl class="stats">
+        <dt>Time</dt><dd id="res-time"></dd>
+        <dt>Peak alert</dt><dd id="res-peak"></dd>
+        <dt>Times spotted</dt><dd id="res-spotted"></dd>
+        <dt>Picks broken</dt><dd id="res-picks"></dd>
+      </dl>
+      <p class="best" id="res-best"></p>
+      <div class="menu row">
+        <button class="btn primary" data-action="retry">Retry</button>
+        <button class="btn" data-action="title">Title</button>
+      </div>
+    </div>
+  </section>
+
+  <div id="busted" hidden>
+    <h2>BUSTED</h2>
+    <p>The SOC traced you.</p>
+  </div>
+
+  <div id="intro-skip" hidden>Press any key or tap to skip</div>
+
+  <div id="rotate" hidden>
+    <div class="card">
+      <div class="rotate-icon" aria-hidden="true">⟳</div>
+      <p>Rotate for the best experience</p>
+      <button class="btn" id="rotate-dismiss">Play in portrait anyway</button>
+    </div>
+  </div>
+
+  <div id="fallback" hidden>
+    <div class="card">
+      <h2>Grand Theft Cizzo</h2>
+      <p id="fallback-msg">Your browser can't run WebGL, which this game needs. Try a recent version of Chrome, Firefox, Safari or Edge, or enable hardware acceleration.</p>
+      <button class="btn" id="fallback-retry" hidden>Try again</button>
+    </div>
+  </div>
+
+  <noscript>
+    <div class="noscript">Grand Theft Cizzo needs JavaScript and WebGL. Please enable JavaScript to play.</div>
+  </noscript>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
